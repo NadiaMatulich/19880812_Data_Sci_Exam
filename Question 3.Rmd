@@ -1,0 +1,212 @@
+---
+title: "Question 3"
+author: "Nadia Matulich"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+library(pacman)
+pacman::p_load(devtools, tinytex, rmarkdown,tidyverse, xts, dplyr, tibble, lubridate, glue)
+
+
+
+```
+# Question 3
+ (using a regular markdown for speed as time is running out and it was not specified in the question)
+
+
+```{r Tennis Data: Djokovic vs Nadal}
+
+#first read in ranking data
+# (I don't want to read it all in as it is a lot of data, so performing multiple sets at a time)
+# could hypothetically run the lazy_read_csv function below with pattern="*_.csv" if that was what you were looking for
+# doing it class of file at a time just to keep my head on straight and to stop my pc from lagging
+
+lazy_read_csv <- function(file_name) {
+    read_csv(file_name) %>% 
+        mutate(filename = file_name)
+}
+
+ranking_data <-
+    list.files('./data/Tennis/', 
+           pattern="atp_rankings_*",
+           full.names=T) %>% map_df(~lazy_read_csv(.)) %>% 
+    rename(player_id=player)
+
+#want to append player names
+# first read in player data
+
+player_data<-read.csv('./data/Tennis/atp_players.csv')
+
+ranking_with_player_data<-left_join(ranking_data, player_data, by='player_id') 
+
+#then sort out date
+
+ranking_with_player_data<-ranking_with_player_data %>% mutate(new_date=ymd(ranking_date))
+
+```
+
+First attempt to garner insights, see how player rankings of Djokovic and Nadal have evolved over time
+
+
+```{r }
+
+#get nadal and Djokovic isolated
+
+nadal_vs_djokovic<-function(){
+nd <- ranking_with_player_data %>% 
+    filter(name_last==c('Djokovic','Nadal')) %>% 
+    ggplot()+
+    geom_point(aes(x=new_date, y=rank, color=name_last))+
+    theme_bw()+
+    labs(title="Rankings", 
+         subtitle="Djokovic vs Nadal",
+         x="year",
+         y="rank",
+         color="Player")+
+    scale_fill_brewer(palette="Reds")
+
+nd    
+    
+}
+
+nadal_vs_djokovic()
+
+nadal_vs_djokovic_lately<-function(){
+nd <- ranking_with_player_data %>% 
+    filter(name_last==c('Djokovic','Nadal'),ranking_date>="2015-01-01") %>% 
+    ggplot()+
+    geom_point(aes(x=new_date, y=rank, color=name_last))+
+    theme_bw()+
+    labs(title="Rankings", 
+         subtitle="Djokovic vs Nadal",
+         x="year",
+         y="rank",
+         color="Player")+
+    scale_fill_brewer(palette="Reds")
+
+nd    
+    
+}
+
+nadal_vs_djokovic_lately()
+
+
+```
+
+nadal is the more consistent player. Djokovich may sometimes beat him, but he plays better on average. 
+
+Next, I want to consider how outcomes differ by pitch type- just the last 22 years
+
+```{r Djokovic vs Nadal }
+
+
+#for some reason my lazy csv isnt working so writing fresh code for reading in multiple csvs
+#btw, I tried this with the ordinary match data and it gives me an error where one the winner seed col is numeric in one data set and character in another? short of looking at every set? proceeding with doubles. 
+
+
+
+lazier_read_csv<- function(root){
+
+library(tidyverse)
+
+    silentread <- function(x){
+        hushread <- purrr::quietly(read_csv)
+        df <- hushread(x)
+        df$result
+    }
+
+    data <-
+        list.files(root, full.names = T, recursive = T) %>%
+        .[grepl("doubles", .)] %>%
+        as.list() %>%
+        map(~silentread(.)) %>% bind_rows()
+
+    data
+
+}
+
+doubles_data<-lazier_read_csv("./data/Tennis/")
+
+```
+
+
+Lets attempt to find out if age is correlated with playing better
+
+then lets see if this result differs based on pitch type
+
+```{r Tennis Age}
+
+younger_vs_older<-function(){
+    
+extracting_relevant_columns<-
+    doubles_data %>% mutate(winner_age=(winner1_age+winner2_age)/2,
+                             loser_age=(loser1_age+loser2_age)/2) %>% 
+    select(winner_age,winner1_age,winner2_age,loser_age, loser1_age,loser2_age,surface)
+
+means<-extracting_relevant_columns %>%  summarise(average_winner_age=mean(winner_age, na.rm=T), average_loser_age=mean(loser_age, na.rm=T))
+    
+wa<-means$average_winner_age
+la<-means$average_loser_age
+
+age<- extracting_relevant_columns %>% 
+    ggplot()+
+    geom_density(aes(x=loser_age), color="blue", fill="blue", alpha=0.3)+
+    geom_density(aes(x=winner_age), color="pink", fill="pink", alpha=0.5)+
+    geom_vline(xintercept = wa, color="pink")+
+    geom_text(aes(x=wa, label="Winner", y=0.10), hjust=-1.5, color="pink")+
+    geom_text(aes(x=la, label="Loser", y=0.08), hjust=-1.5, color="blue")+ #I messed this up but this was the best way I could think of to get a legend without having colors
+    geom_vline(xintercept = la, color="blue")+
+    scale_x_continuous(expand=c(0,0))+
+    scale_y_continuous(expand=c(0,0))+
+    theme_bw()+
+    labs(title="Are Younger Doubles Better?",
+         x="age",
+         y="density")
+
+age
+
+}
+
+younger_vs_older()
+
+```
+
+```{r Tennis Surfaces}
+
+
+surfaces<-function(){
+    
+extracting_relevant_columns<-
+    doubles_data %>% mutate(winner_age=(winner1_age+winner2_age)/2,
+                             loser_age=(loser1_age+loser2_age)/2) %>% 
+    select(winner_age,winner1_age,winner2_age,loser_age, loser1_age,loser2_age,surface)
+
+means<-extracting_relevant_columns %>%  group_by(surface) %>% summarise(average_winner_age=mean(winner_age, na.rm=T), average_loser_age=mean(loser_age, na.rm=T))
+
+g<-means %>% 
+    ggplot(aes(x=surface))+
+     geom_col(aes(y=average_loser_age), colour="blue", fill="blue", alpha=0.5)+
+    geom_col(aes(y=average_winner_age), color="pink", fill="pink", alpha=0.3)+
+    theme_bw()+
+    labs(title="Do Softer Surfaces Give Younger Doubles an Edge?",
+         subtitle="Because, you know, \nmaybe harder surfaces hurt the knees of the older players",
+         x="Age",
+         y="Surface")
+
+    
+g
+
+}
+
+surfaces()
+
+```
+
+The difference is small but it appears that older players play better and are unaffected by pitch type. 
