@@ -1,0 +1,107 @@
+---
+title: "Question 4"
+author: "Nadia Matulich"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+````{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+	
+)
+
+library(pacman)
+pacman::p_load(devtools, tinytex, rmarkdown,tidyverse, xts, dplyr, tibble, lubridate, glue)
+
+
+
+```
+#Question 4
+ 
+ (using a regular markdown for speed as time is running out and it was not specified in the question)
+Question 4
+
+
+```{r Loading Data: Netflix}
+
+netflix_titles<-read.csv("./data/netflix/titles.csv")
+
+netflix_credits<-read.csv("./data/netflix/credits.csv")
+
+netflix<-left_join(netflix_credits,netflix_titles, by="id")
+
+```
+
+Would like to investigate most credited directors
+
+
+```{r Most Popular director}
+
+most_credited<-function(movie_or_series, actor_or_director){
+    
+most_popular_directors<-netflix %>% filter(release_year>=2010, type==movie_or_series, role==actor_or_director) %>% filter(production_countries=="['US']") %>% count(name) %>% arrange(desc(n))
+
+head(most_popular_directors, 11)
+
+}
+
+table<-most_credited(movie_or_series="MOVIE",actor_or_director="DIRECTOR")
+
+```
+
+next, would like to consider if longer movies are better- 
+
+```{r}
+
+does_runtime_matter<-function(){
+    
+g<- netflix_titles %>% 
+    ggplot(aes(x=runtime,y=imdb_score, colors=type))+
+    geom_point(aes(size=imdb_score), alpha=0.1, color="dark blue")+
+    geom_smooth()+
+    labs(title="Does Run Time Matter?",
+         x="Run Time",
+         y="IMDB Score")+
+    facet_wrap(~type)+
+    theme(legend.position="none")+
+    theme_bw()
+    
+g
+
+}
+
+does_runtime_matter()
+
+```
+
+It appears that longer run times are associated with better movies
+
+Lastly, would like to check if older movies are better, and whether things have actually gone downhill with the 'on demad' revolution
+
+```{r}
+older_movies_better<-function(){
+h<- netflix_titles %>% 
+    filter(type=="MOVIE") %>% 
+    ggplot(aes(x=release_year, y=imdb_score))+
+    geom_point()+
+    geom_smooth()+
+    theme_bw()+
+    labs(title="Were Movies Better in the 90s?",
+         subtitle="Or are we just nostalgic?",
+         x="Run Time",
+         y="IMDB Score")
+        
+    
+h
+}
+older_movies_better()
+```
+It appears that they are slightly better
+
+(sorry, really ran out of time towards the end)
+
+
+

@@ -1,0 +1,697 @@
+---
+title: "Project Readme: 19880812"
+author: "Nadia Matulich"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r Loading Packages and creating folders}
+library(pacman)
+pacman::p_load(devtools, tinytex, rmarkdown,tidyverse, xts, dplyr, tibble, lubridate, glue)
+list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
+
+#this doesnt work for me so i have just left the code in the file, sorry :(
+
+
+CHOSEN_LOCATION <- getwd()
+Texevier::create_template(directory = glue::glue("{CHOSEN_LOCATION}"), template_name = "Question_1")
+Texevier::create_template(directory = glue::glue("{CHOSEN_LOCATION}"), template_name = "Question_2")
+
+Texevier::create_template(directory = glue::glue("{CHOSEN_LOCATION}"), template_name = "Question_3")
+Texevier::create_template(directory = glue::glue("{CHOSEN_LOCATION}"), template_name = "Question_4")
+
+
+
+```
+
+# Question 1: Covid
+
+Having been directed by editor of the New York Times, the following needs to be done:
+
+* African experience of covid, vs rest of the world 
+* Asssess co-morbidities on a Macro level
+    * Did countries with higher rates of co-morbidities fare worse?
+* Hospitalisation:
+     * How quickly did different regions increase their hospitalisation facilities
+     * As well as whether this lagged or led ICU emissions
+
+```{r Loading Data: Covid}
+
+deaths_data <- read.csv("data/Covid/Deaths_by_cause.csv")
+
+covid_data <- read.csv("data/Covid/owid-covid-data.csv")
+
+```
+
+Having a look at the data we see a lot of dates, and a lot of missing values. However, we are attempting to assess the experience of the pandemic overall. Additionally, the questions are assessed on a country-country basis as well as a region to region bases. In this regard, I will first transformed the data (see code in comparing deaths by regions) set that has one figure for each country at the last date available for new infections, and for deaths.
+
+I unfortunately could not get the reading in code to work (to read in all code)- so i have kept it all in the read me (it is also in the code fo) ( :( )
+
+```{r Comparing Deaths and Cases by Regions}
+
+
+#Comparing Deaths and Cases by Regions
+
+regions_compare<-function(vjust_input, size_input, round_input){
+
+    deaths_by_region <- covid_data %>%
+        filter(date==last(date)) %>%
+        filter(continent==c("Africa","Europe","South America","North America", "Oceania", "Asia")) %>% #sorry I couldn't think of a more elegant way to get rid of the world averages OWID included with blank (But not NA?) continents
+        group_by(continent) %>%
+        summarise(total_deaths=sum(x=total_deaths_per_million, na.rm=T))
+
+    cases_by_region <- covid_data %>%
+        filter(date==last(date)) %>%
+        filter(continent==c("Africa","Europe","South America","North America", "Oceania", "Asia")) %>%
+        group_by(continent) %>%
+        summarise(total_cases=sum(x=total_cases_per_million, na.rm=T))
+
+    cases_and_deaths<-left_join(deaths_by_region, cases_by_region, by='continent')
+
+    g<- cases_and_deaths %>%
+        ggplot(aes(x=reorder(continent,total_deaths,decreasing=TRUE), y=total_cases, fill=factor(ifelse(continent=="Africa", "Africa","Other Regions"))))+
+        geom_bar(stat="identity")+
+        geom_text(aes(label=round(total_deaths,round_input)),vjust=vjust_input, size=size_input)+
+        theme_bw()+
+        theme(legend.position="none")+
+        labs(title="Total Cases Per Million",
+             subtitle="with Total Deaths Per Million",
+             x="Region",
+             y="Total",)+
+        scale_fill_brewer(palette="Purples")
+    g
+
+}
+
+
+regions_compare_2<-function(){
+
+    deaths_by_region <- covid_data %>%
+        filter(date==last(date)) %>%
+        filter(continent==c("Africa","Europe","South America","North America", "Oceania", "Asia")) %>%
+        group_by(continent) %>%
+        summarise(total_deaths=sum(x=total_deaths_per_million, na.rm=T))
+
+    cases_by_region <- covid_data %>%
+        filter(date==last(date)) %>%
+        filter(continent==c("Africa","Europe","South America","North America", "Oceania", "Asia")) %>%
+        group_by(continent) %>%
+        summarise(total_cases=sum(x=total_cases_per_million, na.rm=T))
+
+    cases_and_deaths<-left_join(deaths_by_region, cases_by_region, by='continent')
+
+    cases_and_deaths<-cases_and_deaths %>% mutate(., new_var=total_deaths/total_cases)
+
+    h<- cases_and_deaths %>%
+        ggplot(aes(x=reorder(continent,new_var,decreasing=TRUE), y=new_var, fill=factor(ifelse(continent=="Africa", "Africa","Other Regions"))))+
+        geom_bar(stat="identity")+
+        theme_bw()+
+        theme(legend.position="none")+
+        labs(title="Proportion of Deaths",
+             x="Region",
+             y="Total",)+
+        scale_fill_brewer(palette="Purples")
+    h
+}
+
+
+
+
+```
+
+
+```{r}
+
+regions_compare(-0.5,3,0)
+```
+
+```{r}
+regions_compare_2()
+```
+
+
+
+```{r}
+
+deaths_by_cardio<-function(){
+
+    #need to filter by last date and country
+    #severity of covid measured by deaths per population
+
+    deaths_by_country <- covid_data %>%
+        filter(date==last(date)) %>%
+        group_by(location) %>%
+        summarise(deaths_per_1000000=total_deaths/(population/100000))
+
+    co_morbidities <- covid_data %>%
+        filter(date==last(date)) %>%
+        select(c(location, aged_70_older,gdp_per_capita,extreme_poverty,cardiovasc_death_rate,diabetes_prevalence,female_smokers, male_smokers, life_expectancy, human_development_index))
+
+    #cannot feasibly show all of these in 15 hours, so for now consider only co-morbidity data
+
+    co_morbidities <- covid_data %>%
+        filter(date==last(date)) %>%
+        select(c(location, cardiovasc_death_rate,diabetes_prevalence,male_smokers,female_smokers))
+
+    morbidity_deaths<-left_join(deaths_by_country,co_morbidities, by='location')
+
+    i<- morbidity_deaths %>%
+        ggplot(aes(x=cardiovasc_death_rate, y=deaths_per_1000000))+
+        geom_point()+
+        geom_smooth()+
+        theme_bw()+
+        labs(title="Deaths per 1000000 Population",
+             subtitle = "By Cardio Vascular Death Prevalence",
+             x="Cardio Vascular Death Prevalence",
+             y="Deaths")
+    i
+
+}
+
+
+
+#sorry this is really inelegant, did not know how to make a function print multiple outputs so in the interest of time I am doing it the inelegant way
+#the first wrangling chunk is the same in each of them
+
+deaths_by_diabetes<-function(){
+
+    #need to filter by last date and country
+    #severity of covid measured by deaths per population
+
+    deaths_by_country <- covid_data %>%
+        filter(date==last(date)) %>%
+        group_by(location) %>%
+        summarise(deaths_per_1000000=total_deaths/(population/100000))
+
+    co_morbidities <- covid_data %>%
+        filter(date==last(date)) %>%
+        select(c(location, aged_70_older,gdp_per_capita,extreme_poverty,cardiovasc_death_rate,diabetes_prevalence,female_smokers, male_smokers, life_expectancy, human_development_index))
+
+    co_morbidities <- covid_data %>%
+        filter(date==last(date)) %>%
+        select(c(location, cardiovasc_death_rate,diabetes_prevalence,male_smokers,female_smokers))
+
+    morbidity_deaths<-left_join(deaths_by_country,co_morbidities, by='location')
+
+    j<- morbidity_deaths %>%
+        ggplot(aes(x=diabetes_prevalence, y=deaths_per_1000000))+
+        geom_point()+
+        geom_smooth()+
+        theme_bw()+
+        labs(title="Deaths per 1000000 Population",
+             subtitle = "By Diabetes Prevalence",
+             x="Diabetes Prevalence",
+             y="Deaths")
+    j
+}
+
+
+
+deaths_by_smoking<-function(){
+
+    #need to filter by last date and country
+    #severity of covid measured by deaths per population
+
+    deaths_by_country <- covid_data %>%
+        filter(date==last(date)) %>%
+        group_by(location) %>%
+        summarise(deaths_per_1000000=total_deaths/(population/100000))
+
+    co_morbidities <- covid_data %>%
+        filter(date==last(date)) %>%
+        select(c(location, aged_70_older,gdp_per_capita,extreme_poverty,cardiovasc_death_rate,diabetes_prevalence,female_smokers, male_smokers, life_expectancy, human_development_index))
+
+    #cannot feasibly show all of these in 15 hours, so for now consider only co-morbidity data
+
+    co_morbidities <- covid_data %>%
+        filter(date==last(date)) %>%
+        select(c(location, cardiovasc_death_rate,diabetes_prevalence,male_smokers,female_smokers))
+
+    morbidity_deaths<-left_join(deaths_by_country,co_morbidities, by='location')
+
+
+    k<- morbidity_deaths %>%
+        ggplot(aes(y=deaths_per_1000000))+
+        geom_point(aes(x=male_smokers), color="blue")+
+        geom_point(aes(x=female_smokers),colour="pink")+
+        geom_smooth(aes(x=female_smokers), colour="pink")+
+        geom_smooth(aes(x=male_smokers))+
+        theme_bw()+
+        labs(title="Deaths per 1000000 Population",
+             subtitle = "By Smoking Prevalence",
+             x="Smoking Prevalence",
+             y="Deaths")
+    k
+}
+
+deaths_by_smoking()
+```
+
+
+Next question
+
+```{r Deaths By Co Morbidities}
+deaths_by_cardio()
+```
+
+
+```{r Deaths By Co Morbidities 2}
+deaths_by_diabetes()
+```
+
+
+```{r Deaths By Co Morbidities 3}
+deaths_by_smoking()
+
+```
+
+really not sure how to approach the last question so skipping for now and will come back later if there is time. does it need a VAR? How do I do that graphically? and how to aggregate by regions but over time series? not sure.
+
+
+## Question 2: London Weather
+
+
+```{r Reading in Data: London}
+
+weather_data <- read.csv("data/London/london_weather.csv")
+
+```
+
+```{r London Sunniness vs Cloudiness}
+
+
+#lets just start with basic graphs
+
+#show sunniness
+
+#show cloudiness
+
+#first gotta sort out the dates
+
+weather_data<-weather_data %>% mutate(new_date=ymd(weather_data$date))
+
+average_sunny_and_cloudy<-function(){
+    
+a<-weather_data %>% na.omit() %>% 
+    filter(new_date>="2017-01-01") %>% 
+    summarise(sunny=round(mean(sunshine),2),cloudy=round(mean(cloud_cover),2))
+
+a
+
+}
+
+knitr::kable(average_sunny_and_cloudy(),format="html")
+
+last_five_years_weekly<-function(){
+
+g<-weather_data %>% 
+  group_by(week=week(new_date)) %>% 
+    filter(new_date>="2017-01-01") %>% 
+  mutate(weekly_sunshine=mean(sunshine)) %>%
+  mutate(weekly_cloudy=mean(cloud_cover)) %>% #takes average by week and creates column with weekly average displayed for each day
+  mutate(weekday=wday(new_date)) %>% #not elegant, but trying to not spend too long on figuring out the perfect way since i couldnt get summarise to give me what i was looking for (kept just giving me only 2021)
+    filter(weekday==7) %>% 
+  ggplot(aes(x=new_date,y=weekly_sunshine))+
+    geom_point(color="yellow", alpha=0.7)+
+    geom_point(aes(y=weekly_cloudy), color="blue", alpha=0.07)+
+    geom_smooth(color="yellow")+
+    geom_smooth(aes(y=weekly_cloudy))+
+    theme_bw()+
+    labs(title="Weekly Sunshine and Cloudy Scores",
+         subtitle = "London 2017-2021",
+         x="Date",
+         y="Score")
+
+g
+
+}
+
+last_five_years_weekly()
+
+
+
+
+```
+
+
+In order to convince her further, because I know she cannnot stand the cold
+
+
+temperatures, min and max
+
+```{r London temperature}
+
+mean_temp<-function(){
+
+g<-weather_data %>% 
+    filter(new_date>="2020-01-01") %>% 
+    ggplot(aes(x=new_date, y=mean_temp))+
+    geom_point(alpha=0.5)+
+    geom_smooth(color="dark grey")+
+    theme_bw()+
+    labs(title="Average Temperature",
+         subtitle = "London 2020",
+         x="Date",
+         y="Temperature")
+
+g
+
+}
+
+mean_temp()
+
+
+min_and_max_temp<-function(){
+
+g<-weather_data %>% 
+  group_by(week=week(new_date)) %>% 
+    filter(new_date>="2020-01-01") %>% 
+    ggplot(aes(x=new_date, y=max_temp))+
+    geom_area(alpha=0.5 , fill="dark blue" )+
+    geom_area(aes(y=min_temp), color="dark blue", fill="dark blue")+
+    theme_bw()+
+    labs(title="London Minimum and Maximum Temperatures",
+         subtitle = "London 2020",
+         x="Date",
+         y="Temperature")
+
+g
+
+}
+
+min_and_max_temp()
+
+```
+
+```{r London Rain }
+
+rain<-function(){
+g<-weather_data %>% 
+  group_by(week=week(new_date)) %>% 
+    filter(new_date>="2020-01-01") %>% 
+  mutate(weekly_rain=mean(precipitation)) %>% 
+    replace(is.na(.),0) %>% 
+  mutate(weekday=wday(new_date)) %>% 
+    filter(weekday==7) %>% 
+    ggplot(aes(x=new_date, y=weekly_rain))+
+    geom_area(alpha=0.5 , fill="dark blue" )+
+    theme_bw()+
+    labs(title="Weekly Precipitation",
+         subtitle = "London 2020",
+         x="Date",
+         y="Precipitation")
+
+
+g
+
+}
+
+rain()
+
+
+```
+
+## Question 3
+
+(i did not put the data in the code file here because of time)
+```{r Tennis Data: Djokovic vs Nadal}
+
+#first read in ranking data
+# (I don't want to read it all in as it is a lot of data, so performing multiple sets at a time)
+# could hypothetically run the lazy_read_csv function below with pattern="*_.csv" if that was what you were looking for
+# doing it class of file at a time just to keep my head on straight and to stop my pc from lagging
+
+lazy_read_csv <- function(file_name) {
+    read_csv(file_name) %>% 
+        mutate(filename = file_name)
+}
+
+ranking_data <-
+    list.files('./data/Tennis/', 
+           pattern="atp_rankings_*",
+           full.names=T) %>% map_df(~lazy_read_csv(.)) %>% 
+    rename(player_id=player)
+
+#want to append player names
+# first read in player data
+
+player_data<-read.csv('./data/Tennis/atp_players.csv')
+
+ranking_with_player_data<-left_join(ranking_data, player_data, by='player_id') 
+
+#then sort out date
+
+ranking_with_player_data<-ranking_with_player_data %>% mutate(new_date=ymd(ranking_date))
+
+```
+
+First attempt to garner insights, see how player rankings of Djokovic and Nadal have evolved over time
+
+
+```{r }
+
+#get nadal and Djokovic isolated
+
+nadal_vs_djokovic<-function(){
+nd <- ranking_with_player_data %>% 
+    filter(name_last==c('Djokovic','Nadal')) %>% 
+    ggplot()+
+    geom_point(aes(x=new_date, y=rank, color=name_last))+
+    theme_bw()+
+    labs(title="Rankings", 
+         subtitle="Djokovic vs Nadal",
+         x="year",
+         y="rank",
+         color="Player")+
+    scale_fill_brewer(palette="Reds")
+
+nd    
+    
+}
+
+nadal_vs_djokovic()
+
+nadal_vs_djokovic_lately<-function(){
+nd <- ranking_with_player_data %>% 
+    filter(name_last==c('Djokovic','Nadal'),ranking_date>="2015-01-01") %>% 
+    ggplot()+
+    geom_point(aes(x=new_date, y=rank, color=name_last))+
+    theme_bw()+
+    labs(title="Rankings", 
+         subtitle="Djokovic vs Nadal",
+         x="year",
+         y="rank",
+         color="Player")+
+    scale_fill_brewer(palette="Reds")
+
+nd    
+    
+}
+
+nadal_vs_djokovic_lately()
+
+
+```
+
+Well, that's pretty much self explanatory
+
+Next, I want to consider how outcomes differ by pitch type- just the last 22 years
+
+```{r Djokovic vs Nadal }
+
+
+#for some reason my lazy csv isnt working so writing fresh code for reading in multiple csvs
+#btw, I tried this with the ordinary match data and it gives me an error where one the winner seed col is numeric in one data set and character in another? short of looking at every set? proceeding with doubles. 
+
+
+
+lazier_read_csv<- function(root){
+
+library(tidyverse)
+
+    silentread <- function(x){
+        hushread <- purrr::quietly(read_csv)
+        df <- hushread(x)
+        df$result
+    }
+
+    data <-
+        list.files(root, full.names = T, recursive = T) %>%
+        .[grepl("doubles", .)] %>%
+        as.list() %>%
+        map(~silentread(.)) %>% bind_rows()
+
+    data
+
+}
+
+doubles_data<-lazier_read_csv("./data/Tennis/")
+
+```
+
+
+lets attempt to find out if age is correlated with playing better
+
+then lets see if this result differs based on pitch type
+
+```{r Tennis Age}
+
+younger_vs_older<-function(){
+    
+extracting_relevant_columns<-
+    doubles_data %>% mutate(winner_age=(winner1_age+winner2_age)/2,
+                             loser_age=(loser1_age+loser2_age)/2) %>% 
+    select(winner_age,winner1_age,winner2_age,loser_age, loser1_age,loser2_age,surface)
+
+means<-extracting_relevant_columns %>%  summarise(average_winner_age=mean(winner_age, na.rm=T), average_loser_age=mean(loser_age, na.rm=T))
+    
+wa<-means$average_winner_age
+la<-means$average_loser_age
+
+age<- extracting_relevant_columns %>% 
+    ggplot()+
+    geom_density(aes(x=loser_age), color="blue", fill="blue", alpha=0.3)+
+    geom_density(aes(x=winner_age), color="pink", fill="pink", alpha=0.5)+
+    geom_vline(xintercept = wa, color="pink")+
+    geom_text(aes(x=wa, label="Winner", y=0.10), hjust=-1.5, color="pink")+
+    geom_text(aes(x=la, label="Loser", y=0.08), hjust=-1.5, color="blue")+ #I messed this up but this was the best way I could think of to get a legend without having colors
+    geom_vline(xintercept = la, color="blue")+
+    scale_x_continuous(expand=c(0,0))+
+    scale_y_continuous(expand=c(0,0))+
+    theme_bw()+
+    labs(title="Are Younger Doubles Better?",
+         x="age",
+         y="density")
+
+age
+
+}
+
+younger_vs_older()
+
+```
+
+```{r Tennis Surfaces}
+
+
+surfaces<-function(){
+    
+extracting_relevant_columns<-
+    doubles_data %>% mutate(winner_age=(winner1_age+winner2_age)/2,
+                             loser_age=(loser1_age+loser2_age)/2) %>% 
+    select(winner_age,winner1_age,winner2_age,loser_age, loser1_age,loser2_age,surface)
+
+means<-extracting_relevant_columns %>%  group_by(surface) %>% summarise(average_winner_age=mean(winner_age, na.rm=T), average_loser_age=mean(loser_age, na.rm=T))
+
+g<-means %>% 
+    ggplot(aes(x=surface))+
+     geom_col(aes(y=average_loser_age), colour="blue", fill="blue", alpha=0.5)+
+    geom_col(aes(y=average_winner_age), color="pink", fill="pink", alpha=0.3)+
+    theme_bw()+
+    labs(title="Do Softer Surfaces Give Younger Doubles an Edge?",
+         subtitle="Because, you know, \nmaybe harder surfaces hurt the knees of the older players",
+         x="Age",
+         y="Surface")
+
+    
+g
+
+}
+
+surfaces()
+
+```
+
+No, it seems players peak at around 39. 
+
+# Question 4
+
+
+```{r Loading Data: Netflix}
+
+netflix_titles<-read.csv("./data/netflix/titles.csv")
+
+netflix_credits<-read.csv("./data/netflix/credits.csv")
+
+netflix<-left_join(netflix_credits,netflix_titles, by="id")
+
+```
+
+Would like to investigate most credited directors
+
+
+```{r Most Popular director}
+
+most_credited<-function(movie_or_series, actor_or_director){
+    
+most_popular_directors<-netflix %>% filter(release_year>=2010, type==movie_or_series, role==actor_or_director) %>% filter(production_countries=="['US']") %>% count(name) %>% arrange(desc(n))
+
+head(most_popular_directors, 11)
+
+}
+
+table<-most_credited(movie_or_series="MOVIE",actor_or_director="DIRECTOR")
+
+```
+
+next, would like to consider if longer movies are better- 
+
+```{r}
+
+does_runtime_matter<-function(){
+    
+g<- netflix_titles %>% 
+    ggplot(aes(x=runtime,y=imdb_score, colors=type))+
+    geom_point(aes(size=imdb_score), alpha=0.1, color="dark blue")+
+    geom_smooth()+
+    labs(title="Does Run Time Matter?",
+         x="Run Time",
+         y="IMDB Score")+
+    facet_wrap(~type)+
+    theme(legend.position="none")+
+    theme_bw()
+    
+g
+
+}
+
+does_runtime_matter()
+
+```
+
+It appears that longer run times are associated with better movies
+
+Lastly, would like to check if older movies are better, and whether things have actually gone downhill with the 'on demad' revolution
+
+```{r}
+older_movies_better<-function(){
+h<- netflix_titles %>% 
+    filter(type=="MOVIE") %>% 
+    ggplot(aes(x=release_year, y=imdb_score))+
+    geom_point()+
+    geom_smooth()+
+    theme_bw()+
+    labs(title="Were Movies Better in the 90s?",
+         subtitle="Or are we just nostalgic?",
+         x="Run Time",
+         y="IMDB Score")
+        
+    
+h
+}
+older_movies_better()
+```
+It appears that they are slightly better
+
+(sorry, really ran out of time towards the end)
+
+
+
